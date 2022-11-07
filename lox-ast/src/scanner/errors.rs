@@ -1,11 +1,17 @@
 #[derive(Debug)]
-pub struct Error<'a> {
+pub struct Error {
     pub line: usize,
-    pub message: &'a str,
+    pub message: String,
 }
 
 pub enum Exception {
     HadError(bool),
+}
+
+impl Error {
+    pub fn new(line: usize, message: String) -> Self {
+        Self { line, message: message }
+    }
 }
 
 impl Exception {

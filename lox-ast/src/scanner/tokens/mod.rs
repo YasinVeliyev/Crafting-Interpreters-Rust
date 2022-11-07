@@ -7,6 +7,7 @@ use self::types::TokenType;
 
 pub mod types;
 
+#[derive(Debug)]
 pub struct Token {
     pub ttype: types::TokenType,
     lexeme: String,
