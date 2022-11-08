@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::env;
-
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
 
@@ -138,13 +137,16 @@ impl Scanner {
                 };
                 self.add_token(token, None)
             }
-            '\\' => Ok(if self.next_is_match('n') {
-                self.line += 1;
-            } else if self.next_is_match('t') || self.next_is_match('r') {
-                self.current += 1;
-            }),
+            '\\' => {
+                if self.next_is_match('n') {
+                    self.line += 1;
+                } else if self.next_is_match('t') || self.next_is_match('r') {
+                    self.current += 1;
+                };
+                Ok(())
+            }
             '/' => {
-                Ok(if self.next_is_match('/') {
+                if self.next_is_match('/') {
                     // A comment goes until the end of the line
                     while let Some(ch) = self.peek() {
                         if ch != '\n' {
@@ -158,13 +160,15 @@ impl Scanner {
                     // block comment start
                     self.scan_comment();
                 } else {
-                    self.add_token(TokenType::Slash, None);
-                })
+                    self.add_token(TokenType::Slash, None).unwrap();
+                };
+                Ok(())
             }
-            ' ' | '\r' | '\t' => Ok({}),
-            '\n' => Ok({
+            ' ' | '\r' | '\t' => Ok(()),
+            '\n' => {
                 self.line += 1;
-            }),
+                Ok(())
+            }
             '"' => self.string(),
             '0'..='9' => self.number(),
             _ => {
@@ -185,7 +189,7 @@ impl Scanner {
     fn advance(&mut self) -> char {
         let current = self.current;
         self.current += 1;
-        *self.source.iter().nth(current).unwrap()
+        self.source.get(current).copied().unwrap()
     }
 
     fn add_token(&mut self, ttype: TokenType, literal: Option<Object>) -> Result<(), Error> {
@@ -195,7 +199,7 @@ impl Scanner {
     }
 
     fn next_is_match(&mut self, expected: char) -> bool {
-        match self.source.iter().nth(self.current) {
+        match self.source.get(self.current) {
             Some(ch) if ch == &expected => {
                 self.current += 1;
                 true

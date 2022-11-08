@@ -19,7 +19,7 @@ impl Token {
     pub fn new(ttype: types::TokenType, lexeme: String, literal: Option<Object>, line: usize) -> Self {
         Self {
             ttype,
-            lexeme: lexeme.to_owned(),
+            lexeme,
             literal,
             line,
         }
