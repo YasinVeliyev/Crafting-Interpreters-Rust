@@ -1,14 +1,17 @@
+use std::collections::HashMap;
 use std::env;
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read, Write};
 
 pub mod errors;
+mod keywords;
 pub mod tokens;
 
 use errors::*;
 use tokens::{object::*, types::*};
 
+use self::keywords::*;
 use self::tokens::Token;
 
 pub fn run_file(path: &String) -> io::Result<()> {
@@ -48,7 +51,7 @@ pub fn run(source: String) -> Result<(), Error> {
 }
 
 struct Scanner {
-    source: String,
+    source: Vec<char>,
     tokens: Vec<Token>,
     start: usize,
     current: usize,
@@ -58,7 +61,7 @@ struct Scanner {
 impl Scanner {
     pub fn new(source: String) -> Result<Self, Error> {
         Ok(Self {
-            source,
+            source: source.chars().collect(),
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -79,7 +82,8 @@ impl Scanner {
                 }
             };
         }
-        self.tokens.push(Token::new(TokenType::Eof, "", None, self.line));
+        self.tokens
+            .push(Token::new(TokenType::Eof, String::new(), None, self.line));
         Ok(())
     }
     pub fn is_at_end(&self) -> bool {
@@ -137,39 +141,154 @@ impl Scanner {
             '\\' => Ok(if self.next_is_match('n') {
                 self.line += 1;
             } else if self.next_is_match('t') || self.next_is_match('r') {
-                self.advance();
+                self.current += 1;
             }),
-            '/' => self.add_token(TokenType::Slash, None),
-
-            _ => Err(Error::new(
-                self.line,
-                format!(
-                    "Unexpected character at {}\n{}\n{:>0$}\n",
-                    self.current, self.source, '^'
-                ),
-            )),
+            '/' => {
+                Ok(if self.next_is_match('/') {
+                    // A comment goes until the end of the line
+                    while let Some(ch) = self.peek() {
+                        if ch != '\n' {
+                            // self.advance();
+                            self.current += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if self.next_is_match('*') {
+                    // block comment start
+                    self.scan_comment();
+                } else {
+                    self.add_token(TokenType::Slash, None);
+                })
+            }
+            ' ' | '\r' | '\t' => Ok({}),
+            '\n' => Ok({
+                self.line += 1;
+            }),
+            '"' => self.string(),
+            '0'..='9' => self.number(),
+            _ => {
+                if c.is_ascii_alphabetic() {
+                    self.identifier()
+                } else {
+                    Err(Error::new(
+                        self.line,
+                        "Unexpected character at",
+                        self.current,
+                        &self.source,
+                    ))
+                }
+            }
         }
     }
 
     fn advance(&mut self) -> char {
         let current = self.current;
         self.current += 1;
-        self.source.chars().nth(current).unwrap()
+        *self.source.iter().nth(current).unwrap()
     }
 
     fn add_token(&mut self, ttype: TokenType, literal: Option<Object>) -> Result<(), Error> {
-        let lexeme = &self.source[self.start..self.current].to_owned();
+        let lexeme: String = self.source[self.start..self.current].iter().collect();
         self.tokens.push(Token::new(ttype, lexeme, literal, self.line));
         Ok(())
     }
 
     fn next_is_match(&mut self, expected: char) -> bool {
-        match self.source.chars().nth(self.current) {
-            Some(ch) if ch == expected => {
+        match self.source.iter().nth(self.current) {
+            Some(ch) if ch == &expected => {
                 self.current += 1;
                 true
             }
             _ => false,
+        }
+    }
+
+    fn string(&mut self) -> Result<(), Error> {
+        while let Some(ch) = self.peek() {
+            match ch {
+                '"' => break,
+                '\n' => self.line += 1,
+                _ => {}
+            }
+            // self.advance()
+            self.current += 1;
+        }
+
+        if self.is_at_end() {
+            return Err(Error::new(self.line, "Unterminated string", self.current, &self.source));
+        }
+
+        // self.advance();
+        self.current += 1;
+        let value: String = self.source[self.start..self.current].iter().collect();
+        self.add_token(TokenType::String, Some(Object::Str(value)))
+    }
+
+    fn peek(&mut self) -> Option<char> {
+        self.source.get(self.current).copied()
+    }
+    fn number(&mut self) -> Result<(), Error> {
+        while let Some(ch) = self.peek() {
+            if ch.is_ascii_digit() {
+                //self.advance()
+                self.current += 1;
+            } else if ch == '.' && self.peek_next().is_ascii_digit() {
+                self.current += 1
+            } else if self.peek_next() != '.' && self.peek_next() == '"' {
+                return Err(Error::new(self.line, "TypeError", self.current + 2, &self.source));
+            } else {
+                break;
+            }
+        }
+        let value: String = self.source[self.start..self.current].iter().collect();
+        let num: f64 = value.parse().unwrap();
+        self.add_token(TokenType::Number, Some(Object::Num(num)))
+    }
+
+    fn peek_next(&self) -> char {
+        if (self.current + 1 >= self.source.len()) {
+            '\n'
+        } else {
+            *self.source.get(self.current + 1).unwrap()
+        }
+    }
+    fn identifier(&mut self) -> Result<(), Error> {
+        while let Some(ch) = self.peek() {
+            if ch.is_alphanumeric() {
+                self.current += 1;
+            } else {
+                break;
+            }
+            // self.advance();
+        }
+        if let Some(ttype) = Scanner::keywords("keyword") {
+            self.add_token(ttype, None)
+        } else {
+            self.add_token(TokenType::Identifier, None)
+        }
+    }
+    fn scan_comment(&mut self) {}
+    fn keywords(keyword: &str) -> Option<TokenType> {
+        match keyword {
+            "and" => Some(TokenType::And),
+            "class" => Some(TokenType::Class),
+            "else" => Some(TokenType::Else),
+            "false" => Some(TokenType::False),
+            "for" => Some(TokenType::For),
+            "fun" => Some(TokenType::Fun),
+            "if" => Some(TokenType::If),
+            "nil" => Some(TokenType::Nil),
+            "or" => Some(TokenType::Or),
+            "print" => Some(TokenType::Print),
+            "return" => Some(TokenType::Return),
+            "super" => Some(TokenType::Super),
+            "this" => Some(TokenType::This),
+            "true" => Some(TokenType::True),
+            "var" => Some(TokenType::Var),
+            "while" => Some(TokenType::While),
+            "break" => Some(TokenType::Break),
+            _ => None,
         }
     }
 }

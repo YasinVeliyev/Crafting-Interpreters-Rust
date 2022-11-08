@@ -9,7 +9,15 @@ pub enum Exception {
 }
 
 impl Error {
-    pub fn new(line: usize, message: String) -> Self {
+    pub fn new(line: usize, message: &str, current: usize, source: &Vec<char>) -> Self {
+        let message = format!(
+            "{} {}\n{}\n{:>1$}\n",
+            message,
+            current,
+            source.iter().collect::<String>(),
+            '^'
+        );
+
         Self { line, message: message }
     }
 }
