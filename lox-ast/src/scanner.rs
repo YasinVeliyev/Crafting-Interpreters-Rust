@@ -100,7 +100,26 @@ impl Scanner {
             ']' => self.add_token(TokenType::RightSquareBracket, None),
             '+' => self.add_token(TokenType::Plus, None),
             '-' => self.add_token(TokenType::Minus, None),
-            '/' => self.add_token(TokenType::Slash, None),
+            '/' => {
+                if self.next_is_match('/') {
+                    // A comment goes until the end of the line
+                    while let Some(ch) = self.peek() {
+                        if ch != '\n' {
+                            // self.advance();
+                            self.current += 1;
+                        } else {
+                            break;
+                        }
+                    }
+                } else if self.next_is_match('*') {
+                    // block comment start
+                    println!("Hiiiiiiiiiiiiiiii");
+                    return self.scan_comment();
+                } else {
+                    self.add_token(TokenType::Slash, None).unwrap();
+                };
+                Ok(())
+            }
             '*' => self.add_token(TokenType::Star, None),
             ',' => self.add_token(TokenType::Comma, None),
             '.' => self.add_token(TokenType::Dot, None),
@@ -145,25 +164,7 @@ impl Scanner {
                 };
                 Ok(())
             }
-            '/' => {
-                if self.next_is_match('/') {
-                    // A comment goes until the end of the line
-                    while let Some(ch) = self.peek() {
-                        if ch != '\n' {
-                            // self.advance();
-                            self.current += 1;
-                        } else {
-                            break;
-                        }
-                    }
-                } else if self.next_is_match('*') {
-                    // block comment start
-                    self.scan_comment();
-                } else {
-                    self.add_token(TokenType::Slash, None).unwrap();
-                };
-                Ok(())
-            }
+
             ' ' | '\r' | '\t' => Ok(()),
             '\n' => {
                 self.line += 1;
@@ -251,7 +252,7 @@ impl Scanner {
     }
 
     fn peek_next(&self) -> char {
-        if (self.current + 1 >= self.source.len()) {
+        if self.current + 1 >= self.source.len() {
             '\n'
         } else {
             *self.source.get(self.current + 1).unwrap()
@@ -272,7 +273,21 @@ impl Scanner {
             self.add_token(TokenType::Identifier, None)
         }
     }
-    fn scan_comment(&mut self) {}
+    fn scan_comment(&mut self) -> Result<(), Error> {
+        while !self.next_is_match('*') && !(self.peek_next() == '/') {
+            if self.current >= self.source.len() {
+                return Err(Error::new(
+                    self.line,
+                    "Uncaught SyntaxError: Invalid or unexpected token",
+                    self.current,
+                    &self.source,
+                ));
+            }
+            self.current += 1;
+        }
+        self.current += 1;
+        Ok(())
+    }
     fn keywords(keyword: &str) -> Option<TokenType> {
         match keyword {
             "and" => Some(TokenType::And),
