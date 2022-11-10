@@ -11,11 +11,13 @@ pub enum Exception {
 impl Error {
     pub fn new(line: usize, message: &str, current: usize, source: &Vec<char>) -> Self {
         let message = format!(
-            "{} {}\n{}\n{:>1$}\n",
+            "File {} , line {}\n {}\n {:>5$}\n{} at {}\n",
+            "",
+            line,
+            source.iter().collect::<String>(),
+            '^',
             message,
             current,
-            source.iter().collect::<String>(),
-            '^'
         );
 
         Self { line, message: message }

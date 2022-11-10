@@ -235,13 +235,18 @@ impl Scanner {
     }
     fn number(&mut self) -> Result<(), Error> {
         while let Some(ch) = self.peek() {
-            if ch.is_ascii_digit() {
+            if ch.is_ascii_digit() && !self.peek_next().is_ascii_alphabetic() {
                 //self.advance()
                 self.current += 1;
             } else if ch == '.' && self.peek_next().is_ascii_digit() {
                 self.current += 1
-            } else if self.peek_next() != '.' && self.peek_next() == '"' {
-                return Err(Error::new(self.line, "TypeError", self.current + 2, &self.source));
+            } else if self.peek_next() != '.' && (self.peek_next() == '"' || self.peek_next().is_ascii_alphabetic()) {
+                return Err(Error::new(
+                    self.line,
+                    "SyntaxError: invalid syntax",
+                    self.current + 2,
+                    &self.source,
+                ));
             } else {
                 break;
             }
